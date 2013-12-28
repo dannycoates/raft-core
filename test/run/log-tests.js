@@ -226,3 +226,46 @@ test(
 		)
 	}
 )
+
+test(
+	'execute: executes the correct entries',
+	function (t) {
+		var log = new Log(new MemoryStorage(), new MemoryStateMachine())
+		log.lastApplied = 0
+		log.entries = [{ term: 1 }, { term: 5 }, { term: 5 }, { term: 9 }]
+		// only term 5 entries should get executed here
+		log.execute(2)
+			.then(
+				function (lastApplied) {
+					t.equal(lastApplied, 2)
+					t.equal(log.lastApplied, 2)
+					// MemoryStateMachine increments it's state for each execution.
+					// It starts at 1 plus the 2 exepected calls should make it 3.
+					t.equal(log.stateMachine.state, 3)
+					t.end()
+				}
+			)
+	}
+)
+
+test(
+	'updateCommitIndex: commitIndex is never set higher than lastIndex',
+	function (t) {
+		log.commitIndex = 1
+		log.entries = [{ term: 1 }, { term: 5 }, { term: 5 }, { term: 9 }]
+		log.updateCommitIndex(80)
+		t.equal(log.commitIndex, 3)
+		t.end()
+	}
+)
+
+test(
+	'updateCommitIndex: commitIndex is never set lower',
+	function (t) {
+		log.commitIndex = 1
+		log.entries = [{ term: 1 }, { term: 5 }, { term: 5 }, { term: 9 }]
+		log.updateCommitIndex(0)
+		t.equal(log.commitIndex, 1)
+		t.end()
+	}
+)

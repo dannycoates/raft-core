@@ -36,11 +36,13 @@ Log.prototype.entryAt = function (index) {
 	return this.entries[index]
 }
 
+/*/
+	Loads the log state and entries from storage
+/*/
 Log.prototype.load = function () {
 	return this.storage.load()
 		.then(this.onLoaded)
 }
-
 function onLoaded(data) {
 	this.currentTerm = data.currentTerm || 0
 	this.votedFor = data.votedFor || 0
