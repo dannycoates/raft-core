@@ -113,7 +113,8 @@ Server.prototype.start = function (peers) {
 		var peer = peers[i]
 		this.peerMap[peer.id] = peer
 	}
-	this.onChangeRole('follower')
+	this.log.load()
+		.then(onChangeRole.bind(this, 'follower'))
 }
 
 /*/

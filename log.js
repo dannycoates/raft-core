@@ -3,13 +3,19 @@ var EventEmitter = require('events').EventEmitter
 var P = require('p-promise')
 
 function Log(storage, stateMachine) {
+	//<persistent>
 	this.votedFor = 0
 	this.entries = []
 	this.currentTerm = 0
+	this.storage = storage
+	//</persistent><volatile>
 	this.commitIndex = -1
 	this.lastApplied = -1
-	this.storage = storage
 	this.stateMachine = stateMachine
+	//</volatile>
+	// How can lastApplied be volatile and still work?
+	// Ok, so if stateMachine is volatile then lastApplied must be volatile.
+	// Snapshotting will require lastApplied and stateMachine to be persistent
 }
 inherits(Log, EventEmitter)
 
@@ -27,6 +33,11 @@ Log.prototype.termAt = function (index) {
 
 Log.prototype.entryAt = function (index) {
 	return this.entries[index]
+}
+
+Log.prototype.load = function () {
+	// TODO load state and entries from storage
+	return P()
 }
 
 /*/
@@ -136,47 +147,46 @@ Log.prototype.entriesSince = function (index) {
 /*/
 	Move the commitIndex up to match the leader and execute those entries
 
-	leaderCommit: Number (this.entries index)
+	newIndex: Number (this.entries index)
 /*/
-Log.prototype.updateCommitIndex = function (leaderCommit) {
-	if (leaderCommit > this.commitIndex) {
-		this.execute(Math.min(leaderCommit, this.lastIndex()))
+Log.prototype.updateCommitIndex = function (newIndex) {
+	if (newIndex > this.commitIndex) {
+		this.commitIndex = Math.min(newIndex, this.lastIndex())
+		this.execute(this.commitIndex)
 	}
 }
 
 /*/
-	Execute the entries up to index on the stateMachine
+	Execute the entries up to and including 'index' on the stateMachine
 
 	index: Number (this.entries index)
 	returns: P(Number) index of last entry executed
 /*/
 Log.prototype.execute = function (index) {
-	if (index <= this.commitIndex) { return P() }
-	this.commitIndex = index
-	var chain = this.stateMachine.execute(this.entryAt(this.lastApplied + 1))
-	for (var i = this.lastApplied + 1; i < index; i++) {
-		chain = chain.then(
-			function (idx, result) {
-				this.executed(idx, result)
-				return this.stateMachine.execute(this.entryAt(idx + 1))
-			}.bind(this, i)
-		)
+	if (index <= this.lastApplied) { return P() }
+	var chain = P()
+	for (var i = this.lastApplied + 1; i <= index; i++) {
+		chain = chain.then(this.executeEntry.bind(this, i))
 	}
-	return chain.then(this.executed.bind(this, index))
+	return chain
 }
 
 /*/
-	Called after an entry has been executed on the stateMachine.
+	Execute a single entry on the stateMachine
 
 	index: Number (this.entries index)
-	result: Anything (the result from the stateMachine)
-	returns: index
-	emits: 'executed'
 /*/
-Log.prototype.executed = function (index, result) {
-	this.lastApplied = index
-	this.emit('executed', index, this.entryAt(index), result)
-	return index
+Log.prototype.executeEntry = function (index) {
+	var entry = this.entryAt(index)
+	if (entry.noop) { return P(index) }
+	return this.stateMachine.execute(entry.op)
+		.then(
+			function (result) {
+				this.lastApplied = index
+				this.emit('executed', index, entry, result)
+				return index
+			}.bind(this)
+		)
 }
 
 module.exports = Log

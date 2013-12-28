@@ -73,7 +73,7 @@ Leader.prototype.updateCommitIndex = function () {
 	// ensure a majority has an entry from my term
 	var majorityIndex = matchIndices[majority]
 	if (this.log.termAt(majorityIndex) === this.log.currentTerm) {
-		this.log.execute(majorityIndex)
+		this.log.updateCommitIndex(majorityIndex)
 	}
 }
 
