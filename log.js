@@ -4,8 +4,8 @@ var P = require('p-promise')
 
 function Log(storage, stateMachine) {
 	//<persistent>
-	this.votedFor = 0
 	this.entries = []
+	this.votedFor = 0
 	this.currentTerm = 0
 	this.storage = storage
 	//</persistent><volatile>
@@ -16,6 +16,7 @@ function Log(storage, stateMachine) {
 	// How can lastApplied be volatile and still work?
 	// Ok, so if stateMachine is volatile then lastApplied must be volatile.
 	// Snapshotting will require lastApplied and stateMachine to be persistent
+	this.onLoaded = onLoaded.bind(this)
 }
 inherits(Log, EventEmitter)
 
@@ -36,8 +37,15 @@ Log.prototype.entryAt = function (index) {
 }
 
 Log.prototype.load = function () {
-	// TODO load state and entries from storage
-	return P()
+	return this.storage.load()
+		.then(this.onLoaded)
+}
+
+function onLoaded(data) {
+	this.currentTerm = data.currentTerm || 0
+	this.votedFor = data.votedFor || 0
+	this.entries = data.entries || []
+	return this
 }
 
 /*/

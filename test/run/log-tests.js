@@ -6,6 +6,28 @@ var MemoryStateMachine = require('../memory-state-machine')
 var log = new Log(new MemoryStorage(), new MemoryStateMachine())
 
 test(
+	'load: loads state and entries from storage',
+	function (t) {
+		var storage = new MemoryStorage()
+		storage.data = {
+			currentTerm: 5,
+			votedFor: 3
+		}
+		storage.entries = [{ term: 4}, { term: 5}]
+		var l = new Log(storage)
+		l.load()
+			.then(
+				function () {
+					t.equal(l.currentTerm, 5, 'loaded currentTerm')
+					t.equal(l.votedFor, 3, 'loaded votedFor')
+					t.equal(l.entries.length, 2, 'loaded entries')
+					t.end()
+				}
+			)
+	}
+)
+
+test(
 	'appendEntries: Reply false if term < currentTerm (§5.1)',
 	function (t) {
 		log.currentTerm = 2
