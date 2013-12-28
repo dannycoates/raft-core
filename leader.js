@@ -15,6 +15,18 @@ function Leader(log, peerIds) {
 }
 inherits(Leader, EventEmitter)
 
+// A leader denies all RPC requests
+Leader.prototype.countVote = function () {} //noop
+Leader.prototype.requestVote = function (vote) { return P(false) }
+Leader.prototype.appendEntries = function (info) { return P(false) }
+
+/*/
+	Sends an appendEntries RPC to all peers
+
+	Upon election: send initial empty AppendEntries RPCs
+	(heartbeat) to each server; repeat during idle periods
+	to prevent election timeouts (§5.2)
+/*/
 function broadcastEntries() {
 	clearTimeout(this.heartbeatTimer)
 	for (var i = 0; i < this.peerIds.length; i++) {
@@ -23,6 +35,12 @@ function broadcastEntries() {
 	this.heartbeatTimer = setTimeout(this.broadcastEntries, 100)
 }
 
+/*/
+	Sends an appendEntries RPC to a peer.
+
+	If last log index ≥ nextIndex for a follower:
+	send AppendEntries RPC with log entries starting at nextIndex
+/*/
 Leader.prototype.sendAppendEntries = function (peerId) {
 	var info = {
 		term: this.log.currentTerm,
@@ -38,7 +56,8 @@ Leader.prototype.sendAppendEntries = function (peerId) {
 }
 
 /*/
-	sends a 'noop' entry to establish log precedence
+	Sends a 'noop' entry to establish log precedence.
+	This entry will persist in the log, but not be executed by the stateMachine
 /*/
 Leader.prototype.noop = function () {
 	this.request(
@@ -55,7 +74,13 @@ Leader.prototype.noop = function () {
 	)
 }
 
-Leader.prototype.updateTerm = function (info) {
+/*/
+	Updates the term if we're no longer leader.
+
+	If RPC request or response contains term T > currentTerm:
+	set currentTerm = T, convert to follower (§5.1)
+/*/
+Leader.prototype.assertRole = function (info) {
 	if (info.term > this.log.currentTerm) {
 		clearTimeout(this.heartbeatTimer)
 		this.log.currentTerm = info.term
@@ -63,24 +88,42 @@ Leader.prototype.updateTerm = function (info) {
 	}
 }
 
+/*/
+	Follow the protocol rules for updating the commitIndex.
+
+	If there exists an N such that N > commitIndex,
+	a majority of matchIndex[i] ≥ N, and log[N].term == currentTerm:
+	set commitIndex = N (§5.3, §5.4).
+/*/
 Leader.prototype.updateCommitIndex = function () {
+	var lastIndex = this.log.lastIndex()
+	if (this.log.commitIndex === lastIndex) { return }
+
 	var majority = Math.floor(this.peerIds.length / 2)
-	var matchIndices = [this.log.lastIndex()]
+	var matchIndices = [lastIndex]
 	for (var i = 0; i < this.peerIds.length; i++) {
 		matchIndices.push(this.matchIndex[this.peerIds[i]] || -1)
 	}
 	matchIndices.sort()
-	// ensure a majority has an entry from my term
 	var majorityIndex = matchIndices[majority]
 	if (this.log.termAt(majorityIndex) === this.log.currentTerm) {
 		this.log.updateCommitIndex(majorityIndex)
 	}
 }
 
-Leader.prototype.countVote = function () {} //noop
+/*/
+	Handles the response from an appendEntries RPC
 
+	peerId: Number,
+	request: Object - the original request,
+	response: {
+		term: Number,
+		success: Boolean
+	}
+/*/
 Leader.prototype.entriesAppended = function (peerId, request, response) {
 	if (response.success) {
+		// If successful: update nextIndex and matchIndex for follower (§5.3)
 		var matchIndex = (request.entries.startIndex + request.entries.values.length) - 1
 		this.matchIndex[peerId] = matchIndex
 		this.nextIndex[peerId] = matchIndex + 1
@@ -89,19 +132,19 @@ Leader.prototype.entriesAppended = function (peerId, request, response) {
 		}
 	}
 	else {
+		// If AppendEntries fails because of log inconsistency:
+		// decrement nextIndex and retry (§5.3)
 		this.nextIndex[peerId] = request.prevLogIndex
 		this.sendAppendEntries(peerId)
 	}
 }
 
-Leader.prototype.requestVote = function (vote) {
-	return P(false)
-}
+/*/
+	Adds a client entry to the log.
 
-Leader.prototype.appendEntries = function (info) {
-	return P(false)
-}
-
+	If command received from client: append entry to local log,
+	respond after entry applied to state machine (§5.3)
+/*/
 Leader.prototype.request = function (info) {
 	return this.log.appendEntries(info)
 		.then(this.broadcastEntries)

@@ -26,7 +26,7 @@ Follower.prototype.resetElectionTimer = function () {
 	)
 }
 
-Follower.prototype.updateTerm = function (info) {
+Follower.prototype.assertRole = function (info) {
 	if (info.term > this.log.currentTerm) {
 		this.log.currentTerm = info.term
 	}

@@ -92,7 +92,7 @@ function onAppendEntries(peerId, info) {
 	}
 /*/
 function entriesAppended(peerId, request, response) {
-	this.role.updateTerm(response)
+	this.role.assertRole(response)
 	this.role.entriesAppended(peerId, request, response)
 }
 
@@ -146,7 +146,7 @@ function countVote(vote) {
 	if (vote.term < this.log.currentTerm) {
 		return
 	}
-	this.role.updateTerm(vote)
+	this.role.assertRole(vote)
 	return this.role.countVote(vote, this.peers.length)
 }
 
@@ -161,7 +161,7 @@ function countVote(vote) {
 	}
 /*/
 Server.prototype.requestVote = function (info) {
-	this.role.updateTerm(info)
+	this.role.assertRole(info)
 	return this.role.requestVote(info)
 		.then(this.requestVoteResponse)
 }
@@ -185,7 +185,7 @@ function requestVoteResponse(voteGranted) {
 	}
 /*/
 Server.prototype.appendEntries = function (info) {
-	this.role.updateTerm(info, 'appendEntries')
+	this.role.assertRole(info, 'appendEntries')
 	return this.role.appendEntries(info)
 		.then(this.appendEntriesResponse)
 }

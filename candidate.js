@@ -30,7 +30,7 @@ Candidate.prototype.setElectionTimeout = function () {
 	)
 }
 
-Candidate.prototype.updateTerm = function (info, rpc) { //TODO rpc is ugly
+Candidate.prototype.assertRole = function (info, rpc) { //TODO rpc is ugly
 	var currentTerm = this.log.currentTerm
 	if (
 		info.term > currentTerm ||
