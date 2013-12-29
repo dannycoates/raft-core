@@ -10,7 +10,6 @@ function Candidate(log) {
 	this.beginElection = beginElection.bind(this)
 	this.electionTimeout = 200
 	this.electionTimer = null
-	this.setElectionTimeout()
 }
 inherits(Candidate, EventEmitter)
 
@@ -22,7 +21,7 @@ Candidate.prototype.clearElectionTimeout = function () {
 	clearTimeout(this.electionTimer)
 }
 
-Candidate.prototype.setElectionTimeout = function () {
+Candidate.prototype.resetElectionTimeout = function () {
 	this.clearElectionTimeout()
 	this.electionTimer = setTimeout(
 		this.beginElection,
@@ -37,6 +36,7 @@ Candidate.prototype.assertRole = function (info, rpc) { //TODO rpc is ugly
 		(rpc === 'appendEntries' && info.term === currentTerm)
 	) {
 		this.log.currentTerm = info.term
+		this.log.votedFor = 0
 		this.clearElectionTimeout()
 		this.emit('changeRole', 'follower')
 	}

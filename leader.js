@@ -11,7 +11,6 @@ function Leader(log, peerIds) {
 	this.heartbeatInterval = 100
 	this.heartbeatTimer = null
 	this.broadcastEntries = broadcastEntries.bind(this)
-	this.noop()
 }
 inherits(Leader, EventEmitter)
 
@@ -32,7 +31,7 @@ function broadcastEntries() {
 	for (var i = 0; i < this.peerIds.length; i++) {
 		this.sendAppendEntries(this.peerIds[i])
 	}
-	this.heartbeatTimer = setTimeout(this.broadcastEntries, 100)
+	this.heartbeatTimer = setTimeout(this.broadcastEntries, this.heartbeatInterval)
 }
 
 /*/
@@ -84,6 +83,7 @@ Leader.prototype.assertRole = function (info) {
 	if (info.term > this.log.currentTerm) {
 		clearTimeout(this.heartbeatTimer)
 		this.log.currentTerm = info.term
+		this.log.votedFor = 0
 		this.emit('changeRole', 'follower')
 	}
 }

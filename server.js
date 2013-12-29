@@ -1,8 +1,9 @@
 var P = require('p-promise')
 
-var Follower = require('./follower')
-var Candidate = require('./candidate')
 var Leader = require('./leader')
+var Candidate = require('./candidate')
+var Follower = require('./follower')
+
 var Log = require('./log')
 
 function Server(id, storage, stateMachine) {
@@ -37,15 +38,19 @@ function onChangeRole(name) {
 	switch (name) {
 		case 'follower':
 			this.role = new Follower(this.log)
+			this.role.resetElectionTimeout()
 			break;
 		case 'candidate':
 			this.role = new Candidate(this.log)
+			this.role.resetElectionTimeout()
 			this.beginElection()
 			break;
 		case 'leader':
 			this.role = new Leader(
 				this.log,
-				this.peers.map(function (p) { return p.id }))
+				this.peers.map(function (p) { return p.id })
+			)
+			this.role.noop()
 			break;
 	}
 	this.role.on('changeRole', this.onChangeRole)
@@ -107,14 +112,15 @@ function entriesAppended(peerId, request, response) {
 		}
 	]
 /*/
-Server.prototype.start = function (peers) {
+Server.prototype.start = function (peers, role) {
+	role = role || 'follower'
 	this.peers = peers
 	for (var i = 0; i < peers.length; i++) {
 		var peer = peers[i]
 		this.peerMap[peer.id] = peer
 	}
 	this.log.load()
-		.then(onChangeRole.bind(this, 'follower'))
+		.then(onChangeRole.bind(this, role))
 }
 
 /*/

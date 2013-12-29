@@ -10,7 +10,6 @@ function Follower(log) {
 	this.electionTimeout = 200
 	this.electionTimer = null
 	this.checkVoteResult = checkVoteResult.bind(this)
-	this.resetElectionTimer()
 }
 inherits(Follower, EventEmitter)
 
@@ -18,7 +17,7 @@ function beginElection() {
 	this.emit('changeRole', 'candidate')
 }
 
-Follower.prototype.resetElectionTimer = function () {
+Follower.prototype.resetElectionTimeout = function () {
 	clearTimeout(this.electionTimer)
 	this.electionTimer = setTimeout(
 		this.beginElection,
@@ -29,6 +28,7 @@ Follower.prototype.resetElectionTimer = function () {
 Follower.prototype.assertRole = function (info) {
 	if (info.term > this.log.currentTerm) {
 		this.log.currentTerm = info.term
+		this.log.votedFor = 0
 	}
 }
 
@@ -38,7 +38,7 @@ Follower.prototype.entriesAppended = function () {} // noop
 
 function checkVoteResult(voteGranted) {
 	if (voteGranted) {
-		this.resetElectionTimer()
+		this.resetElectionTimeout()
 	}
 	return voteGranted
 }
@@ -49,8 +49,8 @@ Follower.prototype.requestVote = function (vote) {
 }
 
 Follower.prototype.appendEntries = function (info) {
-	if (info.leaderId) { this.leaderId = info.leaderId }
-	this.resetElectionTimer()
+	this.leaderId = info.leaderId
+	this.resetElectionTimeout()
 	return this.log.appendEntries(info)
 }
 
