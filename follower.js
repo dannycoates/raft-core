@@ -13,6 +13,10 @@ function Follower(log) {
 }
 inherits(Follower, EventEmitter)
 
+// Followers don't send RPC calls so results don't matter
+Follower.prototype.countVote = function () {}
+Follower.prototype.entriesAppended = function () {}
+
 function beginElection() {
 	this.emit('changeRole', 'candidate')
 }
@@ -32,20 +36,15 @@ Follower.prototype.assertRole = function (info) {
 	}
 }
 
-Follower.prototype.countVote = function () {} // noop
-
-Follower.prototype.entriesAppended = function () {} // noop
-
+Follower.prototype.requestVote = function (vote) {
+	return this.log.requestVote(vote)
+		.then(this.checkVoteResult)
+}
 function checkVoteResult(voteGranted) {
 	if (voteGranted) {
 		this.resetElectionTimeout()
 	}
 	return voteGranted
-}
-
-Follower.prototype.requestVote = function (vote) {
-	return this.log.requestVote(vote)
-		.then(this.checkVoteResult)
 }
 
 Follower.prototype.appendEntries = function (info) {

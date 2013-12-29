@@ -47,7 +47,7 @@ function onLoaded(data) {
 	this.currentTerm = data.currentTerm || 0
 	this.votedFor = data.votedFor || 0
 	this.entries = data.entries || []
-	return this
+	return data
 }
 
 /*/
@@ -79,6 +79,7 @@ function onLoaded(data) {
 /*/
 Log.prototype.appendEntries = function (info) {
 	if (info.term < this.currentTerm) {
+		// you are out of date, go away
 		return P(false)
 	}
 	var newEntries = info.entries || { startIndex: 0, values: [] }
@@ -97,13 +98,14 @@ Log.prototype.appendEntries = function (info) {
 		return P(true)
 	}
 
+	// The currentTerm could only have changed if votedFor = 0 & votedFor can't
+	// change in a term, so we can use it as a heuristic for when to write state.
+	var state = this.votedFor ? {} : { currentTerm: this.currentTerm, votedFor: 0 }
+
 	return this.storage.appendEntries(
 		newEntries.startIndex,
 		newEntries.values,
-		{
-			currentTerm: this.currentTerm,
-			votedFor: this.votedFor
-		}
+		state
 	)
 	.then(
 		function () {

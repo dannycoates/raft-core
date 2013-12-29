@@ -31,12 +31,13 @@ Candidate.prototype.resetElectionTimeout = function () {
 
 Candidate.prototype.assertRole = function (info, rpc) { //TODO rpc is ugly
 	var currentTerm = this.log.currentTerm
-	if (
-		info.term > currentTerm ||
-		(rpc === 'appendEntries' && info.term === currentTerm)
-	) {
+	if (info.term > currentTerm) {
 		this.log.currentTerm = info.term
 		this.log.votedFor = 0
+		this.clearElectionTimeout()
+		this.emit('changeRole', 'follower')
+	}
+	else if (info.term === currentTerm && rpc === 'appendEntries') {
 		this.clearElectionTimeout()
 		this.emit('changeRole', 'follower')
 	}
