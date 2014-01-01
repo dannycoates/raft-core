@@ -1,6 +1,5 @@
 var inherits = require('util').inherits
 var EventEmitter = require('events').EventEmitter
-var P = require('p-promise')
 
 function Candidate(log) {
 	this.name = 'candidate'
@@ -12,6 +11,11 @@ function Candidate(log) {
 	this.electionTimer = null
 }
 inherits(Candidate, EventEmitter)
+
+function nope(x, callback) { process.nextTick(callback.bind(null, null, false)) }
+Candidate.prototype.entriesAppended = function () {} // noop
+Candidate.prototype.requestVote = nope
+Candidate.prototype.appendEntries = nope
 
 function beginElection() {
 	this.emit('changeRole', 'candidate')
@@ -54,18 +58,8 @@ Candidate.prototype.countVote = function (vote, totalPeers) {
 	}
 }
 
-Candidate.prototype.entriesAppended = function () {} // noop
-
-Candidate.prototype.requestVote = function (vote) {
-	return P(false)
-}
-
-Candidate.prototype.appendEntries = function (info) {
-	return P(false)
-}
-
-Candidate.prototype.request = function (entry) {
-	return P.reject({ message: 'no leader' })
+Candidate.prototype.request = function (entry, callback) {
+	process.nextTick(callback.bind(null, { message: 'no leader' }))
 }
 
 module.exports = Candidate

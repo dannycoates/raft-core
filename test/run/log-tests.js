@@ -15,15 +15,16 @@ test(
 		}
 		storage.entries = [{ term: 4}, { term: 5}]
 		var l = new Log(storage)
+		l.once(
+			'loaded',
+			function () {
+				t.equal(l.currentTerm, 5, 'loaded currentTerm')
+				t.equal(l.votedFor, 3, 'loaded votedFor')
+				t.equal(l.entries.length, 2, 'loaded entries')
+				t.end()
+			}
+		)
 		l.load()
-			.then(
-				function () {
-					t.equal(l.currentTerm, 5, 'loaded currentTerm')
-					t.equal(l.votedFor, 3, 'loaded votedFor')
-					t.equal(l.entries.length, 2, 'loaded entries')
-					t.end()
-				}
-			)
 	}
 )
 
@@ -31,9 +32,9 @@ test(
 	'appendEntries: Reply false if term < currentTerm (§5.1)',
 	function (t) {
 		log.currentTerm = 2
-		log.appendEntries({ term: 1 })
-		.then(
-			function (success) {
+		log.appendEntries(
+			{ term: 1 },
+			function (err, success) {
 				log.currentTerm = 0
 				t.equal(success, false, 'denied')
 				t.end()
@@ -52,10 +53,8 @@ test(
 				term: 3,
 				prevLogIndex: 1,
 				prevLogTerm: 3
-			}
-		)
-		.then(
-			function (success) {
+			},
+			function (err, success) {
 				t.equals(success, false, 'denied')
 				t.end()
 			}
@@ -77,10 +76,8 @@ test(
 					startIndex: 2,
 					values: [{ term: 2 }]
 				}
-			}
-		)
-		.then(
-			function (success) {
+			},
+			function (err, success) {
 				t.equal(success, true, 'succeeded')
 				t.equal(log.entries.length, 3, 'correct length')
 				t.equal(log.entries[2].term, 2, 'correct term')
@@ -103,10 +100,8 @@ test(
 					startIndex: 2,
 					values: [{ term: 2 }, { term: 2 }, { term: 2 }]
 				}
-			}
-		)
-		.then(
-			function (success) {
+			},
+			function (err, success) {
 				t.equal(success, true, 'succeeded')
 				t.equal(log.entries.length, 5, 'correct length')
 				t.equal(log.entries[4].term, 2, 'correct term')
@@ -123,10 +118,8 @@ test(
 		log.commitIndex = -1
 		log.entries = [{ term: 1 }, { term: 2 }]
 		log.appendEntries(
-			{ term: 2, prevLogIndex: 1, prevLogTerm: 2, leaderCommit: 1 }
-		)
-		.then(
-			function (success) {
+			{ term: 2, prevLogIndex: 1, prevLogTerm: 2, leaderCommit: 1 },
+			function (err, success) {
 				t.equal(success, true)
 				t.equal(log.commitIndex, 1, 'updated commitIndex')
 				t.end()
@@ -148,10 +141,8 @@ test(
 					startIndex: 0,
 					values: [{ term: 2 }, { term: 2 }, { term: 2 }]
 				}
-			}
-		)
-		.then(
-			function (success) {
+			},
+			function (err, success) {
 				t.equal(success, true)
 				t.equal(log.entries.length, 3, 'correct length')
 				t.end()
@@ -165,10 +156,8 @@ test(
 	function (t) {
 		log.currentTerm = 2
 		log.requestVote(
-			{ term: 1, candidateId: 1, lastLogIndex: 1, lastLogTerm: 1}
-		)
-		.then(
-			function (voteGranted) {
+			{ term: 1, candidateId: 1, lastLogIndex: 1, lastLogTerm: 1},
+			function (err, voteGranted) {
 				t.equal(voteGranted, false)
 				t.end()
 			}
@@ -182,10 +171,8 @@ test(
 		log.currentTerm = 1
 		log.entries = [{ term: 1 }, { term: 1 }]
 		log.requestVote(
-			{ term: 1, candidateId: 1, lastLogIndex: 0, lastLogTerm: 1}
-		)
-		.then(
-			function (voteGranted) {
+			{ term: 1, candidateId: 1, lastLogIndex: 0, lastLogTerm: 1},
+			function (err, voteGranted) {
 				t.equal(voteGranted, false)
 				t.end()
 			}
@@ -199,10 +186,8 @@ test(
 		log.currentTerm = 0
 		log.votedFor = 2
 		log.requestVote(
-			{ term: 1, candidateId: 1, lastLogIndex: 0, lastLogTerm: 1}
-		)
-		.then(
-			function (voteGranted) {
+			{ term: 1, candidateId: 1, lastLogIndex: 0, lastLogTerm: 1},
+			function (err, voteGranted) {
 				t.equal(voteGranted, false)
 				t.end()
 			}
@@ -216,10 +201,8 @@ test(
 		log.currentTerm = 0
 		log.votedFor = 0
 		log.requestVote(
-			{ term: 1, candidateId: 1, lastLogIndex: 1, lastLogTerm: 1}
-		)
-		.then(
-			function (voteGranted) {
+			{ term: 1, candidateId: 1, lastLogIndex: 1, lastLogTerm: 1},
+			function (err, voteGranted) {
 				t.equal(voteGranted, true)
 				t.end()
 			}
@@ -234,17 +217,16 @@ test(
 		log.lastApplied = 0
 		log.entries = [{ term: 1 }, { term: 5 }, { term: 5 }, { term: 9 }]
 		// only term 5 entries should get executed here
-		log.execute(2)
-			.then(
-				function (lastApplied) {
-					t.equal(lastApplied, 2)
-					t.equal(log.lastApplied, 2)
-					// MemoryStateMachine increments it's state for each execution.
-					// It starts at 1 plus the 2 exepected calls should make it 3.
-					t.equal(log.stateMachine.state, 3)
-					t.end()
-				}
-			)
+		log.execute(
+			2,
+			function () {
+				t.equal(log.lastApplied, 2)
+				// MemoryStateMachine increments it's state for each execution.
+				// It starts at 1 plus the 2 exepected calls should make it 3.
+				t.equal(log.stateMachine.state, 3)
+				t.end()
+			}
+		)
 	}
 )
 

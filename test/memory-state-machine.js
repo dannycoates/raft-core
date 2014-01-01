@@ -1,12 +1,11 @@
-var P = require('p-promise')
-
 function MemoryStateMachine() {
 	this.state = 1
 }
 
-MemoryStateMachine.prototype.execute = function (entry) {
+MemoryStateMachine.prototype.execute = function (entry, callback) {
 	console.log('executing', entry)
-	return P(this.state++)
+	this.state++
+	process.nextTick(callback.bind(null, null, this.state))
 }
 
 module.exports = MemoryStateMachine

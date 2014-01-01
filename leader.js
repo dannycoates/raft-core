@@ -1,6 +1,5 @@
 var inherits = require('util').inherits
 var EventEmitter = require('events').EventEmitter
-var P = require('p-promise')
 
 function Leader(log, peerIds) {
 	this.name = 'leader'
@@ -15,9 +14,11 @@ function Leader(log, peerIds) {
 inherits(Leader, EventEmitter)
 
 // A leader denies all RPC requests
-Leader.prototype.countVote = function () {} //noop
-Leader.prototype.requestVote = function (vote) { return P(false) }
-Leader.prototype.appendEntries = function (info) { return P(false) }
+function noop() {}
+function nope(x, callback) { process.nextTick(callback.bind(null, null, false)) }
+Leader.prototype.countVote = noop
+Leader.prototype.requestVote = nope
+Leader.prototype.appendEntries = nope
 
 /*/
 	Sends an appendEntries RPC to all peers
@@ -69,7 +70,8 @@ Leader.prototype.noop = function () {
 				startIndex: this.log.lastIndex() + 1,
 				values: [{term: this.log.currentTerm, noop: true, op: {}}]
 			}
-		}
+		},
+		noop
 	)
 }
 
@@ -145,9 +147,13 @@ Leader.prototype.entriesAppended = function (peerId, request, response) {
 	If command received from client: append entry to local log,
 	respond after entry applied to state machine (§5.3)
 /*/
-Leader.prototype.request = function (info) {
-	return this.log.appendEntries(info)
-		.then(this.broadcastEntries)
+Leader.prototype.request = function (info, callback) {
+	return this.log.appendEntries(info, afterRequest.bind(this, callback))
+}
+function afterRequest(cb, err, success) {
+	if (err || !success) { return cb(err, success) }
+	this.broadcastEntries()
+	cb(null, true)
 }
 
 module.exports = Leader

@@ -1,6 +1,5 @@
 var inherits = require('util').inherits
 var EventEmitter = require('events').EventEmitter
-var P = require('p-promise')
 
 function Log(storage, stateMachine) {
 	//<persistent>
@@ -40,14 +39,13 @@ Log.prototype.entryAt = function (index) {
 	Loads the log state and entries from storage
 /*/
 Log.prototype.load = function () {
-	return this.storage.load()
-		.then(this.onLoaded)
+	this.storage.load(this.onLoaded)
 }
-function onLoaded(data) {
+function onLoaded(err, data) {
 	this.currentTerm = data.currentTerm || 0
 	this.votedFor = data.votedFor || 0
 	this.entries = data.entries || []
-	return data
+	this.emit('loaded', data)
 }
 
 /*/
@@ -77,10 +75,13 @@ function onLoaded(data) {
 	}
 	returns: P(Boolean)
 /*/
-Log.prototype.appendEntries = function (info) {
+Log.prototype.appendEntries = function (info, callback) {
+	var nope = callback.bind(null, null, false)
+	var yep = callback.bind(null, null, true)
+
 	if (info.term < this.currentTerm) {
 		// you are out of date, go away
-		return P(false)
+		return process.nextTick(nope)
 	}
 	var newEntries = info.entries || { startIndex: 0, values: [] }
 	var prevEntry = this.entryAt(info.prevLogIndex)
@@ -89,30 +90,29 @@ Log.prototype.appendEntries = function (info) {
 		(prevEntry && prevEntry.term !== info.prevLogTerm)
 	) {
 		// we are out of date, go back
-		return P(false)
+		return process.nextTick(nope)
 	}
 
 	if (newEntries.values.length === 0) {
 		// nothing new. probably a heartbeat
 		this.updateCommitIndex(info.leaderCommit)
-		return P(true)
+		return process.nextTick(yep)
 	}
 
 	// The currentTerm could only have changed if votedFor = 0 & votedFor can't
 	// change in a term, so we can use it as a heuristic for when to write state.
 	var state = this.votedFor ? {} : { currentTerm: this.currentTerm, votedFor: 0 }
 
-	return this.storage.appendEntries(
+	this.storage.appendEntries(
 		newEntries.startIndex,
 		newEntries.values,
-		state
-	)
-	.then(
-		function () {
+		state,
+		function (err) {
+			if (err) { return callback(err, false) }
 			this.entries.splice(newEntries.startIndex)
 			this.entries = this.entries.concat(newEntries.values)
 			this.updateCommitIndex(info.leaderCommit)
-			return true
+			yep()
 		}.bind(this)
 	)
 }
@@ -133,9 +133,11 @@ Log.prototype.appendEntries = function (info) {
 	}
 	returns: P(Boolean)
 /*/
-Log.prototype.requestVote = function (info) {
+Log.prototype.requestVote = function (info, callback) {
+	var nope = callback.bind(null, null, false)
+
 	if (info.term < this.currentTerm) {
-		return P(false)
+		return process.nextTick(nope)
 	}
 	if (!this.votedFor || this.votedFor === info.candidateId) {
 		var myLastTerm = this.lastTerm()
@@ -151,12 +153,14 @@ Log.prototype.requestVote = function (info) {
 				{
 					votedFor: this.votedFor,
 					currentTerm: this.currentTerm
+				},
+				function (err) {
+					callback(err, !err)
 				}
 			)
-			.then(function () { return true })
 		}
 	}
-	return P(false)
+	process.nextTick(nope)
 }
 
 /*/
@@ -183,7 +187,7 @@ Log.prototype.entriesSince = function (index) {
 Log.prototype.updateCommitIndex = function (newIndex) {
 	if (newIndex > this.commitIndex) {
 		this.commitIndex = Math.min(newIndex, this.lastIndex())
-		this.execute(this.commitIndex)
+		this.execute(this.commitIndex, function () {})
 	}
 }
 
@@ -193,13 +197,18 @@ Log.prototype.updateCommitIndex = function (newIndex) {
 	index: Number (this.entries index)
 	returns: P(Number) index of last entry executed
 /*/
-Log.prototype.execute = function (index) {
-	if (index <= this.lastApplied) { return P() }
-	var chain = P()
+Log.prototype.execute = function (index, callback) {
+	if (index <= this.lastApplied) { return callback() }
+	var entries = []
 	for (var i = this.lastApplied + 1; i <= index; i++) {
-		chain = chain.then(this.executeEntry.bind(this, i))
+		entries.push(i)
 	}
-	return chain
+	return this.chain(entries, callback)
+}
+Log.prototype.chain = function (entries, callback, err) {
+	if (err) { return callback(err) }
+	if (!entries.length) { return callback() }
+	this.executeEntry(entries.shift(), this.chain.bind(this, entries, callback))
 }
 
 /*/
@@ -207,17 +216,22 @@ Log.prototype.execute = function (index) {
 
 	index: Number (this.entries index)
 /*/
-Log.prototype.executeEntry = function (index) {
+Log.prototype.executeEntry = function (index, callback) {
 	var entry = this.entryAt(index)
-	if (entry.noop) { return P(index) }
-	return this.stateMachine.execute(entry.op)
-		.then(
-			function (result) {
-				this.lastApplied = index
-				this.emit('executed', index, entry, result)
-				return index
-			}.bind(this)
-		)
+	if (entry.noop) { return callback() }
+	this.stateMachine.execute(
+		entry.op,
+		afterExecute.bind(this, callback, index, entry)
+	)
+}
+function afterExecute(cb, index, entry, err, result) {
+	if (err) {
+		this.emit('error', new Error('state machine error')) //TODO
+		return cb(err)
+	}
+	this.lastApplied = index
+	this.emit('executed', index, entry, result)
+	cb()
 }
 
 module.exports = Log

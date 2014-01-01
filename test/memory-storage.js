@@ -1,54 +1,52 @@
-var P = require('p-promise')
-
 function MemoryStorage() {
 	this.data = {}
 	this.entries = []
 }
 
-MemoryStorage.prototype.set = function (hash) {
+MemoryStorage.prototype.set = function (hash, callback) {
 	var keys = Object.keys(hash)
 	for (var i = 0; i < keys.length; i++) {
 		var key = keys[i]
 		this.data[key] = hash[key]
 	}
-	return P()
+	process.nextTick(callback.bind(null, null))
 }
 
-MemoryStorage.prototype.get = function (keys) {
+MemoryStorage.prototype.get = function (keys, callback) {
 	var result = {}
 	for(var i = 0; i < keys.length; i++) {
 		var key = keys[i]
 		result[key] = this.data[key]
 	}
-	return P(result)
+	process.nextTick(callback.bind(null, null, result))
 }
 
-MemoryStorage.prototype.appendEntries = function (startIndex, entries, state) {
+MemoryStorage.prototype.appendEntries = function (startIndex, entries, state, callback) {
 	state = state || {}
 	if (this.entries.length !== startIndex) {
 		this.entries.splice(startIndex)
 	}
 	this.entries = this.entries.concat(entries)
-	return this.set(state)
+	this.set(state, callback)
 }
 
-MemoryStorage.prototype.getEntries = function (startIndex) {
-	return P(this.entries.slice(startIndex))
+MemoryStorage.prototype.getEntries = function (startIndex, callback) {
+	process.nextTick(callback.bind(null, null, this.entries.slice(startIndex)))
 }
 
-MemoryStorage.prototype.load = function () {
-	return this.getEntries(0)
-		.then(
-			function (entries) {
-				return this.get(Object.keys(this.data))
-					.then(
-						function (data) {
-							data.entries = entries
-							return data
-						}
-					)
-			}.bind(this)
-		)
+MemoryStorage.prototype.load = function (callback) {
+	this.getEntries(
+		0,
+		function (err, entries) {
+			this.get(
+				Object.keys(this.data),
+				function (err, data) {
+					data.entries = entries
+					callback(err, data)
+				}
+			)
+		}.bind(this)
+	)
 }
 
 module.exports = MemoryStorage

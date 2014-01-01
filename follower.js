@@ -1,6 +1,5 @@
 var inherits = require('util').inherits
 var EventEmitter = require('events').EventEmitter
-var P = require('p-promise')
 
 function Follower(log) {
 	this.name = 'follower'
@@ -9,7 +8,6 @@ function Follower(log) {
 	this.beginElection = beginElection.bind(this)
 	this.electionTimeout = 200
 	this.electionTimer = null
-	this.checkVoteResult = checkVoteResult.bind(this)
 }
 inherits(Follower, EventEmitter)
 
@@ -36,25 +34,26 @@ Follower.prototype.assertRole = function (info) {
 	}
 }
 
-Follower.prototype.requestVote = function (vote) {
-	return this.log.requestVote(vote)
-		.then(this.checkVoteResult)
+Follower.prototype.requestVote = function (vote, callback) {
+	return this.log.requestVote(vote, afterRequestVote.bind(this, callback))
 }
-function checkVoteResult(voteGranted) {
+function afterRequestVote(cb, err, voteGranted) {
 	if (voteGranted) {
 		this.resetElectionTimeout()
 	}
-	return voteGranted
+	cb(err, voteGranted)
 }
 
-Follower.prototype.appendEntries = function (info) {
+Follower.prototype.appendEntries = function (info, callback) {
 	this.leaderId = info.leaderId
 	this.resetElectionTimeout()
-	return this.log.appendEntries(info)
+	this.log.appendEntries(info, callback)
 }
 
-Follower.prototype.request = function (entry) {
-	return P.reject({ message: 'not the leader', leaderId: this.leaderId })
+Follower.prototype.request = function (entry, callback) {
+	process.nextTick(
+		callback.bind(null, { message: 'not the leader', leaderId: this.leaderId })
+	)
 }
 
 module.exports = Follower
